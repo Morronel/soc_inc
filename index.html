@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#050a12">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>SOC Inc.</title>
+  <meta name="description" content="A Plague Inc: The Cure-style strategy game for defenders: run a SOC, find hidden intruders, contain them, attribute the adversary and evict them for good. Real tools, real frameworks, deep lore.">
+  <meta property="og:title" content="SOC Inc.">
+  <meta property="og:description" content="Run the SOC. Find the hidden intruders, contain the spread, attribute the actor, evict them all at once. Can you keep the board on your side?">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SOC Inc.">
+  <meta property="og:url" content="https://morronel.github.io/soc_inc/">
+  <meta property="og:image" content="https://morronel.github.io/soc_inc/assets/og-image.jpg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="SOC Inc.: a network map with detected intruders and quarantined departments">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SOC Inc.">
+  <meta name="twitter:description" content="Run the SOC. Find the hidden intruders, contain the spread, attribute the actor, evict them all at once.">
+  <meta name="twitter:image" content="https://morronel.github.io/soc_inc/assets/og-image.jpg">
+  <script>
+    // Cache guard: the deploy stamps __BUILD__ with the commit hash on every asset URL and in version.json.
+    // In-app webviews (Telegram & co.) cache aggressively: if this page is older than the live build, clear caches and reload once.
+    (function () {
+      var BUILD = '__BUILD__';
+      if (/^__/.test(BUILD) || !window.fetch) return;                // local dev: nothing to compare against
+      try {
+        if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations)
+          navigator.serviceWorker.getRegistrations().then(function (rs) { rs.forEach(function (r) { r.unregister(); }); });
+        if (window.caches && caches.keys) caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); });
+      } catch (e) { /* not available */ }
+      fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (v) {
+        if (!v || !v.build || v.build === BUILD) return;
+        var key = 'si_reload_' + v.build;
+        try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch (e) { return; }  // never loop
+        location.replace(location.pathname + '?v=' + v.build + location.hash);
+      }).catch(function () { /* offline: keep what we have */ });
+    })();
+  </script>
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest?v=__BUILD__">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Exo+2:wght@700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=__BUILD__">
+</head>
+<body>
+<div id="app">
+
+  <!-- ===================================================== TITLE -->
+  <section id="scr-title" class="screen active">
+    <div class="title-bg"><canvas id="title-radar"></canvas></div>
+    <div class="title-wrap">
+      <div class="logo-badge">◈ BLUE TEAM</div>
+      <div class="logo glitch" data-text="SOC INC.">SOC INC.</div>
+      <div class="tagline">// <span data-i18n="tagline"></span></div>
+      <div class="title-menu">
+        <button class="btn btn-primary" id="btn-play" data-i18n="play"></button>
+        <button class="btn" id="btn-howto" data-i18n="howto"></button>
+        <button class="btn" id="btn-radio-title"><span class="onair-dot"></span> <span data-i18n="radio"></span></button>
+        <a class="btn btn-channel hidden" id="btn-channel" target="_blank" rel="noopener"><img class="ch-logo" src="assets/binary-xor.png" alt=""><span class="ch-text"><small data-i18n="channel"></small><b class="ch-name"></b></span></a>
+      </div>
+      <div class="lang-switch">
+        <button data-lang="en">EN</button><button data-lang="uk">УКР</button>
+      </div>
+      <p class="disclaimer" data-i18n="disclaimer"></p>
+      <div class="version">v<span id="ver"></span></div>
+    </div>
+  </section>
+
+  <!-- ===================================================== SETUP -->
+  <section id="scr-setup" class="screen">
+    <header class="bar">
+      <button class="icon-btn" id="setup-back" aria-label="back">‹</button>
+      <h2 data-i18n="setupTitle"></h2>
+      <span></span>
+    </header>
+    <div class="setup-body">
+      <label class="lbl" data-i18n="nameLabel"></label>
+      <div class="name-row">
+        <input id="team-name" maxlength="16" spellcheck="false" autocomplete="off">
+        <button class="btn btn-small" id="name-reroll">⟳ <span data-i18n="reroll"></span></button>
+      </div>
+      <label class="lbl" data-i18n="companyLabel"></label>
+      <div class="cards" id="company-cards"></div>
+      <label class="lbl" data-i18n="advLabel"></label>
+      <div class="cards" id="adv-cards"></div>
+    </div>
+    <div class="setup-foot">
+      <button class="btn btn-primary btn-wide" id="btn-start" data-i18n="start"></button>
+    </div>
+  </section>
+
+  <!-- ===================================================== GAME -->
+  <section id="scr-game" class="screen">
+    <header class="hud-top">
+      <button class="icon-btn" id="btn-menu" aria-label="menu">☰</button>
+      <div class="hud-id">
+        <div class="hud-name"><span id="hud-name"></span> <em class="sev s4" id="hud-sev">SEV-4</em></div>
+        <div class="hud-clock" id="hud-clock"></div>
+      </div>
+      <div class="hud-res">
+        <div class="hud-budget" id="hud-budget">$<b id="budget-val">0</b>K</div>
+        <div class="hud-analysts" id="hud-analysts" title="analysts">👤 <b id="analyst-val">0/0</b></div>
+      </div>
+      <button class="icon-btn speed" id="btn-speed">1×</button>
+      <button class="icon-btn" id="btn-radio" aria-label="radio">📻</button>
+    </header>
+    <div class="ticker" id="ticker"><span class="ticker-tag">◉ SOC</span><div class="ticker-text"><span id="ticker-text"></span></div></div>
+    <div class="map-wrap" id="map-wrap">
+      <canvas id="map"></canvas>
+      <div class="dept-tip hidden" id="dept-tip"></div>
+      <div class="hint hidden" id="hint"></div>
+    </div>
+    <footer class="hud-bottom">
+      <div class="meters">
+        <div class="meter m-known"><div class="m-lbl"><span data-i18n="mKnown"></span><b id="m-known-v">0</b></div><div class="m-bar"><i id="m-known"></i></div></div>
+        <div class="meter m-dmg"><div class="m-lbl"><span id="m-dmg-l"></span><b id="m-dmg-v">0%</b></div><div class="m-bar"><i id="m-dmg"></i></div></div>
+        <div class="meter m-inv"><div class="m-lbl"><span data-i18n="mInv"></span><b id="m-inv-v"></b></div><div class="m-bar"><i id="m-inv"></i></div></div>
+        <div class="meter m-plan"><div class="m-lbl"><span data-i18n="mPlan"></span><b id="m-plan-v"></b></div><div class="m-bar"><i id="m-plan"></i></div></div>
+        <div class="meter m-trust"><div class="m-lbl"><span data-i18n="mTrust"></span><b id="m-trust-v"></b></div><div class="m-bar"><i id="m-trust"></i><s style="left:25%"></s></div></div>
+        <div class="meter m-vis"><div class="m-lbl"><span data-i18n="mVis"></span><b id="m-vis-v"></b></div><div class="m-bar"><i id="m-vis"></i></div></div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-soc" id="btn-soc"><span data-i18n="socBtn"></span> <em id="soc-badge" class="badge hot hidden"></em></button>
+        <button class="btn btn-defense" id="btn-defense"><span data-i18n="defense"></span> <em id="defense-badge" class="badge hidden"></em></button>
+        <button class="btn btn-erad" id="btn-erad" disabled><span id="erad-label"></span></button>
+      </div>
+    </footer>
+  </section>
+
+  <!-- ===================================================== END -->
+  <section id="scr-end" class="screen">
+    <div class="end-body">
+      <div class="end-title glitch" id="end-title" data-text=""></div>
+      <p class="end-sub" id="end-sub"></p>
+      <img class="share-img" id="share-img" alt="result card">
+      <div class="end-actions">
+        <button class="btn btn-primary" id="btn-share" data-i18n="share"></button>
+        <button class="btn" id="btn-save" data-i18n="saveImg"></button>
+        <a class="btn btn-tg" id="btn-tgshare" target="_blank" rel="noopener"><span class="tg-ico">✈</span> <span data-i18n="tgShare"></span></a>
+        <a class="btn btn-channel hidden" id="btn-channel-end" target="_blank" rel="noopener"><img class="ch-logo" src="assets/binary-xor.png" alt=""><span class="ch-text"><small data-i18n="channel"></small><b class="ch-name"></b></span></a>
+      </div>
+      <h3 data-i18n="stats"></h3>
+      <div class="stat-grid" id="stat-grid"></div>
+      <h3 id="debrief-title"></h3>
+      <ul class="debrief" id="debrief"></ul>
+      <h3 data-i18n="advReport"></h3>
+      <p class="muted" data-i18n="advReportHint"></p>
+      <div class="adv-report" id="adv-report"></div>
+      <h3 data-i18n="program"></h3>
+      <p class="muted" data-i18n="programHint"></p>
+      <div class="program" id="program"></div>
+      <h3 data-i18n="lesson"></h3>
+      <p class="lesson" id="lesson"></p>
+      <div class="end-actions">
+        <button class="btn btn-primary" id="btn-again" data-i18n="again"></button>
+        <button class="btn" id="btn-end-menu" data-i18n="menu"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================== OVERLAYS -->
+  <div class="overlay" id="ovl-tree">
+    <div class="panel tree-panel">
+      <header class="bar">
+        <h2 data-i18n="tree"></h2>
+        <div class="hud-budget">$<b id="tree-budget">0</b>K</div>
+        <button class="icon-btn" data-close aria-label="close">✕</button>
+      </header>
+      <nav class="tabs" id="tree-tabs"></nav>
+      <div class="tree-grid-wrap"><svg class="tree-lines" id="tree-lines"></svg><div class="tree-grid" id="tree-grid"></div></div>
+      <div class="tree-detail" id="tree-detail"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovl-soc">
+    <div class="panel soc-panel">
+      <header class="bar"><h2 data-i18n="socTitle"></h2><span class="soc-stats" id="soc-stats"></span><button class="icon-btn" data-close aria-label="close">✕</button></header>
+      <nav class="tabs soc-tabs" id="soc-tabs">
+        <button data-tab="alerts" class="on" style="--c:#ffb020" data-i18n="tabAlerts"></button>
+        <button data-tab="adv" style="--c:#ff3b5c" data-i18n="tabAdv"></button>
+      </nav>
+      <ol class="soc-list" id="soc-list"></ol>
+      <div class="adv-pane hidden" id="adv-pane"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovl-dept">
+    <div class="panel dept-panel">
+      <header class="bar"><h2 id="dept-title"></h2><div class="hud-budget">$<b id="dept-budget">0</b>K</div><button class="icon-btn" data-close aria-label="close">✕</button></header>
+      <div class="dept-info" id="dept-info"></div>
+      <div class="dept-actions" id="dept-actions"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovl-menu">
+    <div class="panel small-panel">
+      <h2 data-i18n="paused"></h2>
+      <button class="btn btn-primary btn-wide" data-close data-i18n="resume"></button>
+      <button class="btn btn-wide" id="menu-howto" data-i18n="howto"></button>
+      <button class="btn btn-wide" id="menu-radio" data-i18n="radio"></button>
+      <div class="row-setting"><span data-i18n="sfx"></span><button class="btn btn-small" id="sfx-toggle"></button></div>
+      <div class="row-setting"><span data-i18n="language"></span><div class="lang-switch"><button data-lang="en">EN</button><button data-lang="uk">УКР</button></div></div>
+      <button class="btn btn-wide btn-danger" id="menu-quit" data-i18n="quit"></button>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovl-howto">
+    <div class="panel">
+      <header class="bar"><h2 data-i18n="howto"></h2><span></span><button class="icon-btn" data-close aria-label="close">✕</button></header>
+      <div class="howto-body" id="howto-body"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovl-radio">
+    <div class="panel radio-panel">
+      <header class="bar"><h2>NIGHTSHIFT.FM <small>101.1 MHz</small></h2><span class="onair" id="radio-onair"></span><button class="icon-btn" data-close aria-label="close">✕</button></header>
+      <div class="radio-viz"><canvas id="radio-viz"></canvas></div>
+      <div class="radio-now"><small data-i18n="nowPlaying"></small><div id="radio-track"></div><div class="radio-time" id="radio-time"></div></div>
+      <div class="radio-ctrl">
+        <button class="icon-btn big" id="radio-prev">⏮</button>
+        <button class="icon-btn big" id="radio-toggle">▶</button>
+        <button class="icon-btn big" id="radio-next">⏭</button>
+      </div>
+      <input type="range" id="radio-vol" min="0" max="100" value="70">
+      <ol class="radio-list" id="radio-list"></ol>
+      <p class="muted" data-i18n="radioNote"></p>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovl-confirm">
+    <div class="panel small-panel">
+      <h2 class="cyan" data-i18n="confirmTitle"></h2>
+      <p data-i18n="confirmTxt"></p>
+      <p class="warn" id="confirm-warn"></p>
+      <button class="btn btn-erad btn-wide" id="confirm-yes" data-i18n="yes"></button>
+      <button class="btn btn-wide" data-close data-i18n="no"></button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <div class="crt"></div>
+</div>
+
+<script src="js/config.js?v=__BUILD__"></script>
+<script src="js/labels.js?v=__BUILD__"></script>
+<script src="js/i18n.js?v=__BUILD__"></script>
+<script src="js/data.js?v=__BUILD__"></script>
+<script src="js/upgrades.js?v=__BUILD__"></script>
+<script src="js/game.js?v=__BUILD__"></script>
+<script src="js/audio.js?v=__BUILD__"></script>
+<script src="js/map.js?v=__BUILD__"></script>
+<script src="js/share.js?v=__BUILD__"></script>
+<script src="js/ui.js?v=__BUILD__"></script>
+</body>
+</html>
